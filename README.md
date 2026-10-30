@@ -2,7 +2,7 @@
 
 **Ding replaces the plastic buzzers at coffee shops and food counters.** The cashier enters the order, the customer scans one QR code on the counter, and their own phone shows the order and rings when it's ready. No app to install, no hardware to buy, charge or lose.
 
-**Live demo:** https://YOUR-DEMO-LINK.onrender.com  *(open it on a laptop, then scan the counter QR with your phone)*
+**Try it yourself:** run `node start.js` (Node 18+, nothing to install). It prints a public https link: open it on a laptop, then scan the counter QR with your phone. Or deploy your own copy in one click with the included `render.yaml` (see [Deploy](#deploy-free-demo-on-render)).
 
 | Counter screen (staff) | Customer's phone | Owner dashboard |
 |---|---|---|
