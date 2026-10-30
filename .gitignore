@@ -1,0 +1,6 @@
+# Created at runtime: orders and the private push (VAPID) key. Never publish these.
+data/
+node_modules/
+*.log
+# Local setup notes, not part of the app
+CLAUDE.md

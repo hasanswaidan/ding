@@ -1,0 +1,81 @@
+/* Ding — shared styles.
+   Layout concept: a counter ticket board. Big condensed numerals like a deli "now serving" board,
+   amber LEDs for "preparing", green LEDs for "ready", on a cool mint-grey counter surface. */
+:root {
+  --paper: #EEF1EC;
+  --card: #FAFBF8;
+  --ink: #14211B;
+  --muted: #5B6A62;
+  --line: #D3DBD3;
+  --prep: #C97C05;
+  --prep-soft: #F6E7C8;
+  --ready: #0F8A54;
+  --ready-soft: #CFEBDC;
+  --danger: #A83C2B;
+  --on-accent: #FFFFFF;
+  --shadow: 0 1px 2px rgba(20, 33, 27, .06), 0 8px 24px rgba(20, 33, 27, .06);
+  --font-display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
+  --font-body: "Familjen Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0E1411;
+    --card: #172019;
+    --ink: #E6EDE8;
+    --muted: #92A198;
+    --line: #2A362F;
+    --prep: #F0A93A;
+    --prep-soft: #3A2E17;
+    --ready: #38C985;
+    --ready-soft: #143A28;
+    --danger: #E7735F;
+    --on-accent: #08130D;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--prep); outline-offset: 2px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5em;
+  min-height: 44px; padding: 0 18px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  font-weight: 600; letter-spacing: .01em; white-space: nowrap;
+  transition: transform .08s ease, background .15s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn-ready { background: var(--ready); color: var(--on-accent); border-color: var(--ready); }
+.btn-quiet { background: transparent; border-color: transparent; color: var(--muted); padding: 0 10px; }
+.btn-quiet:hover { color: var(--ink); }
+.btn[disabled] { opacity: .5; cursor: default; }
+
+.label {
+  font: 600 12px/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px;
+  font: 600 12px/1 var(--font-body); background: var(--paper); color: var(--muted); border: 1px solid var(--line);
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--ready); background: var(--ready-soft); border-color: transparent; }
+.chip.warn { color: var(--prep); background: var(--prep-soft); border-color: transparent; }
+.chip.off { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

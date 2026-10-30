@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ding · {{shop}} dashboard</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Familjen+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  body { min-height: 100dvh; padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px, env(safe-area-inset-left)); }
+  .app { max-width: 1280px; margin: 0 auto; padding-block: 18px 40px; display: grid; gap: 18px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand b { font: 900 30px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
+  .brand span { color: var(--muted); }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+  .seg button { border: 0; background: transparent; padding: 0 14px; height: 40px; font-weight: 600; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .updated { font: 600 12px/1 var(--font-mono); color: var(--muted); }
+  a.btn { text-decoration: none; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; box-shadow: var(--shadow); min-width: 0; }
+  .panel h2 { margin: 0; font-size: 18px; }
+  .panel .sub { margin: -8px 0 0; color: var(--muted); font-size: 14px; }
+
+  /* Stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 6px; }
+  .tile .v { font: 900 40px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .tile .k { font-size: 14px; color: var(--muted); }
+  .tile .v small { font: 600 14px/1 var(--font-mono); color: var(--muted); margin-left: 4px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* Column chart: one series, ink bars, 4px rounded tops on the baseline, 2px gaps */
+  .cols { position: relative; height: 200px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; align-items: end; border-bottom: 1px solid var(--line); }
+  .cols .c { height: 100%; display: flex; align-items: flex-end; cursor: default; }
+  .cols .c i { display: block; width: 100%; background: var(--ink); border-radius: 4px 4px 0 0; min-height: 0; }
+  .cols .c:hover i, .cols .c:focus i { background: var(--prep); }
+  .cols .c.zero i { height: 0 !important; }
+  .axis { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; font: 600 11px/1 var(--font-mono); color: var(--muted); text-align: center; margin-top: 6px; }
+  .axis span { overflow: hidden; white-space: nowrap; }
+  .ymax { position: absolute; top: -2px; left: 0; font: 600 11px/1 var(--font-mono); color: var(--muted); background: var(--card); padding-right: 4px; }
+
+  /* Horizontal bars for top items */
+  .bars { display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: minmax(90px, 34%) 1fr auto; gap: 10px; align-items: center; }
+  .bar .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .track { height: 14px; }
+  .bar .track i { display: block; height: 100%; background: var(--ink); border-radius: 0 4px 4px 0; }
+  .bar:hover .track i { background: var(--prep); }
+  .bar .val { font: 600 13px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+
+  .tip { position: fixed; z-index: 30; pointer-events: none; background: var(--ink); color: var(--paper); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.35; box-shadow: var(--shadow); max-width: 240px; }
+  .tip b { display: block; }
+
+  /* Orders table */
+  .table-wrap { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+  th { text-align: left; font: 600 11px/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td .d { color: var(--muted); }
+  td.n { font: 900 22px/1 var(--font-display); }
+  .search { height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); min-width: 0; width: 220px; max-width: 100%; }
+  .row-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 22px; color: var(--muted); text-align: center; }
+
+  .gate { max-width: 360px; margin: 12vh auto 0; }
+  .gate form { display: grid; gap: 12px; }
+  .gate input { height: 48px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); }
+  .err { color: var(--danger); font-size: 14px; margin: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand"><b>{{shop}}</b><span>Dashboard</span></div>
+    <div class="filters">
+      <div class="seg" role="group" aria-label="Time range" id="range">
+        <button type="button" data-range="today" aria-pressed="true">Today</button>
+        <button type="button" data-range="7">7 days</button>
+        <button type="button" data-range="30">30 days</button>
+        <button type="button" data-range="90">90 days</button>
+      </div>
+      <a class="btn" href="/">Counter screen</a>
+      <span class="updated" id="updated"></span>
+    </div>
+  </div>
+
+  <section class="panel gate" id="gate" hidden>
+    <h2>Staff PIN</h2>
+    <form id="pinForm">
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" required aria-label="Staff PIN">
+      <p class="err" id="pinErr" hidden>That PIN didn't work. Try again.</p>
+      <button class="btn btn-primary" type="submit">Open dashboard</button>
+    </form>
+  </section>
+
+  <div id="main" style="display:grid;gap:18px" hidden>
+    <div class="tiles" id="tiles"></div>
+
+    <div class="grid2">
+      <section class="panel">
+        <h2 id="timeTitle">Orders by hour</h2>
+        <p class="sub" id="timeSub"></p>
+        <div id="timeChart"></div>
+      </section>
+      <section class="panel">
+        <h2>Top items</h2>
+        <p class="sub">By number sold</p>
+        <div id="itemsChart"></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="row-head">
+        <h2>All orders</h2>
+        <div class="filters">
+          <input class="search" id="search" type="search" placeholder="Search items, notes, number">
+          <button class="btn" id="csv" type="button">Download CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="table"></div>
+    </section>
+  </div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(() => {
+  const NEED_PIN = "{{needPin}}" === "1";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let pin = '';
+  try { pin = localStorage.getItem('ding-pin') || ''; } catch (_) {}
+  let range = 'today';
+  try { range = localStorage.getItem('ding-dash-range') || 'today'; } catch (_) {}
+  let data = { orders: [] };
+
+  // ---------- Formatting ----------
+  const money = (n) => Number(n).toFixed(2);
+  const dur = (ms) => {
+    if (ms == null || !isFinite(ms)) return '–';
+    const s = Math.round(ms / 1000);
+    return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  };
+  const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '–');
+  const time = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const day = (t) => new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  const STATUS = { preparing: 'Preparing', ready: 'Ready', collected: 'Collected', cancelled: 'Cancelled' };
+  const itemsText = (o) => (o.items || []).map((it) => `${it.qty}× ${it.name}${it.details ? ` (${it.details})` : ''}`).join(', ');
+
+  // ---------- Loading ----------
+  function since() {
+    if (range === 'today') { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+    return Date.now() - Number(range) * 86400e3;
+  }
+  async function load() {
+    const qs = new URLSearchParams({ days: range === 'today' ? 1 : range, since: since() });
+    if (pin) qs.set('pin', pin);
+    try {
+      const r = await fetch('/api/staff/history?' + qs, { headers: pin ? { 'X-Staff-Pin': pin } : {}, cache: 'no-store' });
+      if (r.status === 401) return showGate(!!pin);
+      if (!r.ok) throw new Error(r.status);
+      data = await r.json();
+      $('gate').hidden = true; $('main').hidden = false;
+      render();
+      $('updated').textContent = 'Updated ' + time(Date.now());
+    } catch (_) {
+      $('updated').textContent = 'Offline, retrying…';
+    }
+  }
+  function showGate(err) { $('main').hidden = true; $('gate').hidden = false; $('pinErr').hidden = !err; $('pin').focus(); }
+  $('pinForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    pin = $('pin').value.trim();
+    try { localStorage.setItem('ding-pin', pin); } catch (_) {}
+    load();
+  });
+
+  // ---------- Rendering ----------
+  function render() {
+    const all = data.orders;
+    const valid = all.filter((o) => o.status !== 'cancelled');
+    const cancelled = all.length - valid.length;
+    const priced = valid.filter((o) => o.total != null);
+    const revenue = priced.reduce((s, o) => s + o.total, 0);
+    const prep = avg(valid.filter((o) => o.readyAt).map((o) => o.readyAt - o.createdAt));
+    const pickup = avg(valid.filter((o) => o.status === 'collected' && o.readyAt && o.doneAt).map((o) => o.doneAt - o.readyAt));
+    const scanned = valid.filter((o) => o.claimedAt || o.scannedAt).length;
+    const alerts = valid.filter((o) => o.alerts).length;
+    const live = valid.filter((o) => o.status === 'preparing' || o.status === 'ready').length;
+    const itemCount = valid.reduce((s, o) => s + (o.items || []).reduce((a, it) => a + it.qty, 0), 0);
+
+    const tiles = [
+      [valid.length, cancelled ? `Orders · ${cancelled} cancelled` : 'Orders', ''],
+      [priced.length ? money(revenue) : '–', 'Revenue', ''],
+      [priced.length ? money(revenue / priced.length) : '–', 'Average order', ''],
+      [itemCount, 'Items sold', ''],
+      [dur(prep), 'Average prep time', ''],
+      [dur(pickup), 'Average pickup wait', ''],
+      [pct(scanned, valid.length), 'Customers who scanned', ''],
+      [pct(alerts, valid.length), 'Turned on alerts', ''],
+      [live, 'Open right now', ''],
+    ];
+    $('tiles').innerHTML = tiles.map(([v, k, extra]) => `<div class="tile"><div class="v">${esc(v)}${extra ? `<small>${esc(extra)}</small>` : ''}</div><div class="k">${esc(k)}</div></div>`).join('');
+
+    renderTimeChart(valid);
+    renderItems(valid);
+    renderTable();
+  }
+
+  function renderTimeChart(valid) {
+    let buckets;
+    if (range === 'today') {
+      $('timeTitle').textContent = 'Orders by hour';
+      $('timeSub').textContent = 'Today';
+      const counts = Array(24).fill(0);
+      valid.forEach((o) => counts[new Date(o.createdAt).getHours()]++);
+      const used = counts.map((c, h) => (c ? h : -1)).filter((h) => h >= 0);
+      const from = Math.min(7, ...used), to = Math.max(20, ...used);
+      buckets = counts.slice(from, to + 1).map((c, i) => ({ label: String(from + i).padStart(2, '0'), tip: `${String(from + i).padStart(2, '0')}:00–${String(from + i + 1).padStart(2, '0')}:00`, v: c }));
+    } else {
+      $('timeTitle').textContent = 'Orders per day';
+      $('timeSub').textContent = `Last ${range} days`;
+      const days = Number(range), start = new Date(); start.setHours(0, 0, 0, 0);
+      buckets = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d0 = start.getTime() - i * 86400e3, d1 = d0 + 86400e3;
+        const v = valid.filter((o) => o.createdAt >= d0 && o.createdAt < d1).length;
+        const dt = new Date(d0);
+        buckets.push({ label: days <= 7 ? dt.toLocaleDateString([], { weekday: 'short' }) : String(dt.getDate()), tip: day(d0), v });
+      }
+    }
+    const max = Math.max(1, ...buckets.map((b) => b.v));
+    const every = Math.ceil(buckets.length / 14); // thin the axis labels so they never collide
+    $('timeChart').innerHTML = `<div class="cols" role="img" aria-label="${esc($('timeTitle').textContent)}">
+        <span class="ymax">${max}</span>
+        ${buckets.map((b) => `<div class="c ${b.v ? '' : 'zero'}" tabindex="0" data-tip="<b>${esc(b.tip)}</b>${b.v} order${b.v === 1 ? '' : 's'}"><i style="height:${(b.v / max) * 100}%"></i></div>`).join('')}
+      </div>
+      <div class="axis">${buckets.map((b, i) => `<span>${i % every ? '' : esc(b.label)}</span>`).join('')}</div>`;
+  }
+
+  function renderItems(valid) {
+    const byName = new Map();
+    valid.forEach((o) => (o.items || []).forEach((it) => {
+      const k = it.name.toLowerCase();
+      const m = byName.get(k) || { name: it.name, qty: 0, revenue: 0, priced: false, details: new Map() };
+      m.qty += it.qty;
+      if (it.price != null) { m.revenue += it.price * it.qty; m.priced = true; }
+      if (it.details) m.details.set(it.details, (m.details.get(it.details) || 0) + it.qty);
+      byName.set(k, m);
+    }));
+    const top = [...byName.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
+    if (!top.length) { $('itemsChart').innerHTML = '<div class="empty">No items yet in this period.</div>'; return; }
+    const max = top[0].qty;
+    $('itemsChart').innerHTML = `<div class="bars">${top.map((m) => {
+      const fav = [...m.details.entries()].sort((a, b) => b[1] - a[1])[0];
+      const tip = `<b>${esc(m.name)}</b>${m.qty} sold${m.priced ? ` · ${money(m.revenue)}` : ''}${fav ? `<br>Most asked: ${esc(fav[0])}` : ''}`;
+      return `<div class="bar" tabindex="0" data-tip="${esc(tip)}"><span class="name">${esc(m.name)}</span><span class="track"><i style="width:${(m.qty / max) * 100}%"></i></span><span class="val">${m.qty}</span></div>`;
+    }).join('')}</div>`;
+  }
+
+  function filtered() {
+    const q = $('search').value.trim().toLowerCase();
+    const list = [...data.orders].sort((a, b) => b.createdAt - a.createdAt);
+    return q ? list.filter((o) => `${o.number} ${itemsText(o)} ${o.note} ${o.status}`.toLowerCase().includes(q)) : list;
+  }
+  function phone(o) {
+    if (o.alerts) return 'Alerts on';
+    if (o.claimedAt || o.scannedAt) return 'Scanned';
+    return '–';
+  }
+  function renderTable() {
+    const list = filtered();
+    if (!list.length) { $('table').innerHTML = '<div class="empty">No orders in this period yet.</div>'; return; }
+    $('table').innerHTML = `<table>
+      <thead><tr><th>#</th><th>Time</th><th>Items</th><th>Status</th><th class="num">Prep</th><th class="num">Pickup</th><th>Phone</th><th class="num">Total</th></tr></thead>
+      <tbody>${list.map((o) => `<tr>
+        <td class="n">${esc(o.number)}</td>
+        <td>${range === 'today' ? '' : esc(day(o.createdAt)) + '<br>'}${esc(time(o.createdAt))}</td>
+        <td>${(o.items || []).map((it) => `<div>${it.qty}× ${esc(it.name)}${it.details ? ` <span class="d">${esc(it.details)}</span>` : ''}</div>`).join('') || '<span class="d">No items</span>'}
+            ${o.note ? `<div class="d">${esc(o.note)}</div>` : ''}</td>
+        <td>${esc(STATUS[o.status] || o.status)}</td>
+        <td class="num">${o.readyAt ? dur(o.readyAt - o.createdAt) : '–'}</td>
+        <td class="num">${o.status === 'collected' && o.readyAt && o.doneAt ? dur(o.doneAt - o.readyAt) : '–'}</td>
+        <td>${phone(o)}</td>
+        <td class="num">${o.total != null ? money(o.total) : '–'}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  // ---------- Hover tooltip ----------
+  const tip = $('tip');
+  function showTip(el, x, y) {
+    tip.innerHTML = el.dataset.tip; tip.hidden = false;
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2)) + 'px';
+    tip.style.top = Math.max(8, y - r.height - 12) + 'px';
+  }
+  document.addEventListener('pointermove', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (el) showTip(el, e.clientX, e.clientY); else tip.hidden = true;
+  });
+  document.addEventListener('focusin', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    showTip(el, r.left + r.width / 2, r.top);
+  });
+  document.addEventListener('focusout', () => { tip.hidden = true; });
+
+  // ---------- Controls ----------
+  function setRange(r) {
+    range = r;
+    try { localStorage.setItem('ding-dash-range', r); } catch (_) {}
+    document.querySelectorAll('#range button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.range === r)));
+    load();
+  }
+  $('range').addEventListener('click', (e) => { const b = e.target.closest('[data-range]'); if (b) setRange(b.dataset.range); });
+  $('search').addEventListener('input', renderTable);
+  $('csv').addEventListener('click', () => {
+    const rows = [['number', 'created', 'status', 'items', 'note', 'total', 'prep_seconds', 'pickup_seconds', 'scanned', 'alerts']];
+    filtered().forEach((o) => rows.push([
+      o.number, new Date(o.createdAt).toISOString(), o.status, itemsText(o), o.note || '', o.total ?? '',
+      o.readyAt ? Math.round((o.readyAt - o.createdAt) / 1000) : '',
+      o.status === 'collected' && o.readyAt && o.doneAt ? Math.round((o.doneAt - o.readyAt) / 1000) : '',
+      o.claimedAt || o.scannedAt ? 'yes' : 'no', o.alerts ? 'yes' : 'no',
+    ]));
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+    a.download = `ding-orders-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  if (NEED_PIN && !pin) showGate(false);
+  else setRange(['today', '7', '30', '90'].includes(range) ? range : 'today');
+  setInterval(() => { if ($('gate').hidden) load(); }, 10000);
+})();
+</script>
+</body>
+</html>

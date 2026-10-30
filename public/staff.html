@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ding · {{shop}} counter</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Familjen+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  body { min-height: 100dvh; padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px, env(safe-area-inset-left)); }
+  .app { max-width: 1280px; margin: 0 auto; padding-block: 18px 32px; display: grid; gap: 18px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand b { font: 900 30px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
+  .brand span { color: var(--muted); }
+  .live { font: 600 12px/1 var(--font-mono); color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .live.on::before { background: var(--ready); box-shadow: 0 0 0 4px var(--ready-soft); }
+
+  .layout { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; box-shadow: var(--shadow); }
+  .panel h2 { margin: 0; font-size: 18px; }
+  form { display: grid; gap: 12px; }
+  .field { display: grid; gap: 6px; }
+  .field input {
+    height: 48px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper);
+    min-width: 0; width: 100%;
+  }
+  #number { font: 900 30px/1 var(--font-display); height: 60px; font-variant-numeric: tabular-nums; }
+  .hint { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* QR handover card: turned toward the customer */
+  .handover { text-align: center; justify-items: center; }
+  .handover .qr { width: 100%; max-width: 260px; aspect-ratio: 1; background: #fff; border-radius: 12px; padding: 10px; display: grid; place-items: center; }
+  .handover .qr svg { width: 100%; height: auto; display: block; }
+  .handover .qr .fallback { color: #14211B; font: 600 12px/1.4 var(--font-mono); word-break: break-all; }
+  .handover .scan-title { font: 900 34px/1 var(--font-display); text-transform: uppercase; letter-spacing: .02em; }
+  @media print { /* "Print this QR": just the counter card */
+    body > .app > .top, #main > .board, #main > div > .panel:not(#counterQr), #printQr, #nextClaim { display: none !important; }
+    #main { display: block !important; }
+    #counterQr { box-shadow: none; border: 0; }
+    #counterQr .qr { max-width: 420px; }
+  }
+  .handover p { margin: 0; }
+  .link { font: 600 12px/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+
+  .board { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 640px) { .board { grid-template-columns: 1fr; } }
+  .col { display: grid; gap: 10px; min-width: 0; }
+  .col-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+  .col-head h2 { margin: 0; font: 900 22px/1 var(--font-display); text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; gap: 10px; }
+  .col-head h2::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--prep); }
+  .col.ready .col-head h2::before { background: var(--ready); }
+  .count { font: 600 13px/1 var(--font-mono); color: var(--muted); }
+
+  .ticket {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+    display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; min-width: 0;
+  }
+  .ticket.is-ready { border-color: var(--ready); box-shadow: inset 4px 0 0 var(--ready); }
+  .ticket .n { grid-row: span 2; font: 900 48px/.9 var(--font-display); min-width: 2ch; font-variant-numeric: tabular-nums; }
+  .ticket .info { min-width: 0; display: grid; gap: 6px; }
+  .ticket .note { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ticket .note.empty { color: var(--muted); font-weight: 400; }
+  .ticket .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ticket .age { font: 600 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ticket .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 6px; }
+  .ticket .actions .btn-ready, .ticket .actions .btn-primary { flex: 1 1 140px; }
+  .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 22px; color: var(--muted); text-align: center; font-size: 15px; }
+
+  .top-right { display: flex; align-items: center; gap: 12px; }
+  .demo-note { margin: 0; padding: 12px 16px; border-radius: 12px; background: var(--prep-soft); color: var(--ink); font-size: 15px; }
+  .demo-note a { color: inherit; }
+  a.btn { text-decoration: none; }
+
+  /* Item entry */
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .quick:empty { display: none; }
+  .quick button { height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); font-size: 14px; font-weight: 600; }
+  .items { display: grid; gap: 8px; }
+  .item { display: grid; grid-template-columns: 1fr 64px 36px; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+  .item input { height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); min-width: 0; width: 100%; }
+  .item .it-details { grid-column: 1 / 2; }
+  .item .it-price { grid-column: 2 / 4; }
+  .item .rm { height: 40px; border: 0; background: transparent; color: var(--muted); font-size: 20px; }
+  .add-item { justify-self: start; padding-left: 0; }
+  .total { font: 600 15px/1 var(--font-mono); text-align: right; }
+
+  .handover .next { font-weight: 600; }
+  .handover .next.none { color: var(--muted); font-weight: 400; }
+  .ticket .lines { display: grid; gap: 2px; font-size: 15px; }
+  .ticket .lines .d { color: var(--muted); }
+
+  .gate { max-width: 360px; margin: 12vh auto 0; }
+  .err { color: var(--danger); font-size: 14px; margin: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand"><b>{{shop}}</b><span>Counter screen</span></div>
+    <div class="top-right">
+      <a class="btn btn-quiet" href="/dashboard" target="_blank" rel="noopener">Dashboard</a>
+      <span class="live" id="live">Offline</span>
+    </div>
+  </div>
+
+  <p class="demo-note" id="demoNote" hidden>
+    <b>Live demo.</b> Add an order here, then scan the counter QR below with your phone and tap <b>Turn on alerts</b>.
+    Click <b>Mark ready</b> and your phone rings. The <a href="/dashboard">dashboard</a> is filled with sample data.
+  </p>
+
+  <section class="panel gate" id="gate" hidden>
+    <h2>Staff PIN</h2>
+    <form id="pinForm">
+      <div class="field"><label class="label" for="pin">Enter the counter PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" required></div>
+      <p class="err" id="pinErr" hidden>That PIN didn't work. Try again.</p>
+      <button class="btn btn-primary" type="submit">Open counter screen</button>
+    </form>
+  </section>
+
+  <div class="layout" id="main" hidden>
+    <div style="display:grid;gap:18px">
+      <section class="panel">
+        <h2>New order</h2>
+        <form id="newForm" autocomplete="off">
+          <div class="field">
+            <label class="label" for="number">Order number</label>
+            <input id="number" inputmode="numeric" maxlength="8" required>
+          </div>
+          <div class="field">
+            <span class="label">Items</span>
+            <div class="quick" id="quick"></div>
+            <div class="items" id="items"></div>
+            <button class="btn btn-quiet add-item" id="addItem" type="button">+ Add item</button>
+          </div>
+          <div class="field">
+            <label class="label" for="noteInput">Note (optional)</label>
+            <input id="noteInput" maxlength="80" placeholder="e.g. for Rami, takeaway">
+          </div>
+          <div class="total" id="total" hidden></div>
+          <button class="btn btn-primary" type="submit">Add order</button>
+          <p class="hint">Then the customer scans the counter QR and sees this order on their phone.</p>
+        </form>
+        <datalist id="menuList"></datalist>
+      </section>
+
+      <section class="panel handover" id="counterQr">
+        <span class="label">Customers, scan this</span>
+        <div class="qr" id="qr"></div>
+        <div class="scan-title">Scan for your order</div>
+        <div class="next" id="nextClaim"></div>
+        <div class="link" id="joinLink"></div>
+        <button class="btn" id="printQr" type="button">Print this QR</button>
+      </section>
+    </div>
+
+    <div class="board">
+      <section class="col">
+        <div class="col-head"><h2>Preparing</h2><span class="count" id="cPrep">0</span></div>
+        <div class="col" id="listPrep"></div>
+      </section>
+      <section class="col ready">
+        <div class="col-head"><h2>Ready</h2><span class="count" id="cReady">0</span></div>
+        <div class="col" id="listReady"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const NEED_PIN = "{{needPin}}" === "1";
+  const $ = (id) => document.getElementById(id);
+  $('demoNote').hidden = "{{demo}}" !== "1";
+  let pin = '';
+  try { pin = localStorage.getItem('ding-pin') || ''; } catch (_) {}
+  let state = { orders: [], nextNumber: 1, base: location.origin };
+  let es = null;
+  let numberTouched = false;
+
+  const headers = () => ({ 'Content-Type': 'application/json', ...(pin ? { 'X-Staff-Pin': pin } : {}) });
+  async function api(path, body) {
+    const r = await fetch(path, { method: 'POST', headers: headers(), body: JSON.stringify(body || {}) });
+    if (r.status === 401) { showGate(true); throw new Error('pin'); }
+    if (pollTimer) setTimeout(poll, 150);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { alert(data.error || 'Something went wrong. Try again.'); throw new Error(r.status); }
+    return data;
+  }
+
+  // Polling fallback: some tunnels (e.g. trycloudflare) hold back SSE, so if no event arrives soon, poll instead.
+  let gotEvent = false, pollTimer = null, waitTimer = null;
+  function applyOrders(d) {
+    state = { ...state, ...d };
+    $('gate').hidden = true; $('main').hidden = false;
+    render();
+  }
+  async function poll() {
+    try {
+      const r = await fetch('/api/staff/orders' + (pin ? `?pin=${encodeURIComponent(pin)}` : ''), { headers: headers(), cache: 'no-store' });
+      if (r.status === 401) { stopPolling(); showGate(!!pin); return; }
+      if (!r.ok) throw new Error(r.status);
+      applyOrders(await r.json());
+      $('live').classList.add('on');
+    } catch (_) {
+      $('live').classList.remove('on'); $('live').textContent = 'Reconnecting…';
+    }
+  }
+  function stopPolling() { clearInterval(pollTimer); clearTimeout(waitTimer); pollTimer = null; }
+
+  function showGate(err) {
+    if (es) es.close();
+    stopPolling();
+    $('main').hidden = true; $('gate').hidden = false; $('pinErr').hidden = !err;
+    $('pin').focus();
+  }
+  $('pinForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    pin = $('pin').value.trim();
+    try { localStorage.setItem('ding-pin', pin); } catch (_) {}
+    start();
+  });
+
+  function start() {
+    if (es) es.close();
+    stopPolling();
+    loadMenu();
+    es = new EventSource('/api/staff/events' + (pin ? `?pin=${encodeURIComponent(pin)}` : ''));
+    es.addEventListener('orders', (e) => {
+      gotEvent = true;
+      applyOrders(JSON.parse(e.data));
+    });
+    waitTimer = setTimeout(() => { if (!gotEvent) { poll(); pollTimer = setInterval(poll, 2000); } }, 4000);
+    es.addEventListener('open', () => $('live').classList.add('on'));
+    es.addEventListener('error', async () => {
+      $('live').classList.remove('on'); $('live').textContent = 'Reconnecting…';
+      if (NEED_PIN) {
+        const r = await fetch('/api/staff/events?pin=' + encodeURIComponent(pin), { method: 'HEAD' }).catch(() => null);
+        if (r && r.status === 401) showGate(!!pin);
+      }
+    });
+  }
+
+  const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function phoneChips(o) {
+    if (o.alerts) return '<span class="chip ok">Alerts on</span>';
+    if (o.watching) return '<span class="chip ok">Watching on phone</span>';
+    if (o.scannedAt || o.claimedAt) return '<span class="chip warn">Scanned, page closed</span>';
+    if (o.id === state.nextClaim) return '<span class="chip warn">Next scan gets this</span>';
+    return '<span class="chip off">Not scanned</span>';
+  }
+  const money = (n) => (n == null ? '' : Number(n).toFixed(2));
+  function itemLines(o) {
+    const items = o.items || [];
+    if (!items.length) return `<div class="note ${o.note ? '' : 'empty'}">${o.note ? esc(o.note) : 'No items'}</div>`;
+    return `<div class="lines">${items.map((it) => `<div><b>${it.qty}× ${esc(it.name)}</b>${it.details ? ` <span class="d">${esc(it.details)}</span>` : ''}</div>`).join('')}
+      ${o.note ? `<div class="d">${esc(o.note)}</div>` : ''}</div>`;
+  }
+
+  function ticket(o) {
+    const ready = o.status === 'ready';
+    const age = ready ? `Ready ${fmt(Date.now() - o.readyAt)} ago` : `Waiting ${fmt(Date.now() - o.createdAt)}`;
+    const callOut = ready && !o.alerts && !o.watching ? '<span class="chip warn">Call out the number</span>' : '';
+    return `<article class="ticket ${ready ? 'is-ready' : ''}" data-id="${o.id}">
+      <div class="n">${esc(o.number)}</div>
+      <div class="info">
+        ${itemLines(o)}
+        <div class="chips">${phoneChips(o)}${callOut}</div>
+      </div>
+      <div class="age" data-age="${ready ? o.readyAt : o.createdAt}" data-ready="${ready ? 1 : 0}">${age}</div>
+      <div class="actions">${ready
+        ? `<button class="btn btn-primary" data-act="collected">Collected</button>
+           <button class="btn" data-act="ping">Ring again</button>
+           <button class="btn btn-quiet" data-act="reopen">Undo</button>`
+        : `<button class="btn btn-ready" data-act="ready">Mark ready</button>
+           <button class="btn" data-act="note">Note</button>
+           <button class="btn btn-quiet" data-act="cancel">Cancel</button>`}
+      </div>
+    </article>`;
+  }
+
+  function render() {
+    $('live').textContent = 'Live';
+    renderCounterQR();
+    const next = state.orders.find((o) => o.id === state.nextClaim);
+    $('nextClaim').className = 'next' + (next ? '' : ' none');
+    $('nextClaim').textContent = next
+      ? `Next scan gets order ${next.number}${(next.items || []).length ? ': ' + next.items.map((it) => `${it.qty}× ${it.name}`).join(', ') : ''}`
+      : 'Enter an order first, then the customer scans.';
+    const prep = state.orders.filter((o) => o.status === 'preparing').sort((a, b) => a.createdAt - b.createdAt);
+    const ready = state.orders.filter((o) => o.status === 'ready').sort((a, b) => a.readyAt - b.readyAt);
+    $('cPrep').textContent = prep.length; $('cReady').textContent = ready.length;
+    $('listPrep').innerHTML = prep.length ? prep.map(ticket).join('') : '<div class="empty">No orders in the queue. Create one on the left.</div>';
+    $('listReady').innerHTML = ready.length ? ready.map(ticket).join('') : '<div class="empty">Orders you mark ready show up here until they are collected.</div>';
+    if (!numberTouched || !$('number').value) { $('number').value = state.nextNumber; numberTouched = false; }
+  }
+  setInterval(() => {
+    document.querySelectorAll('[data-age]').forEach((el) => {
+      const t = Number(el.dataset.age);
+      el.textContent = el.dataset.ready === '1' ? `Ready ${fmt(Date.now() - t)} ago` : `Waiting ${fmt(Date.now() - t)}`;
+    });
+  }, 1000);
+
+  // One fixed QR for the counter: a scan picks up the newest order no phone has taken yet
+  let qrFor = null;
+  function renderCounterQR() {
+    const url = `${state.base || location.origin}/join`;
+    if (url === qrFor) return;
+    qrFor = url;
+    $('joinLink').textContent = url;
+    if (window.qrcode) {
+      const q = qrcode(0, 'M'); q.addData(url); q.make();
+      $('qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+    } else {
+      $('qr').innerHTML = `<div class="fallback">QR library didn't load. Customers can open:<br>${esc(url)}</div>`;
+    }
+  }
+  $('printQr').addEventListener('click', () => window.print());
+
+  // ---------- Item entry ----------
+  let menuItems = [];
+  async function loadMenu() {
+    try {
+      const r = await fetch('/api/staff/menu' + (pin ? `?pin=${encodeURIComponent(pin)}` : ''), { headers: headers(), cache: 'no-store' });
+      if (!r.ok) return;
+      menuItems = (await r.json()).items || [];
+    } catch (_) { return; }
+    $('menuList').innerHTML = menuItems.map((m) => `<option value="${esc(m.name)}">`).join('');
+    $('quick').innerHTML = menuItems.slice(0, 10).map((m, i) => `<button type="button" data-quick="${i}">+ ${esc(m.name)}</button>`).join('');
+  }
+  function addRow(it = {}) {
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = `<input class="it-name" list="menuList" maxlength="40" placeholder="Item, e.g. Flat white">
+      <input class="it-qty" type="number" min="1" max="99" inputmode="numeric" aria-label="Quantity">
+      <button class="rm" type="button" aria-label="Remove item">×</button>
+      <input class="it-details" maxlength="80" placeholder="Details, e.g. 2 shots, oat milk">
+      <input class="it-price" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Price">`;
+    row.querySelector('.it-name').value = it.name || '';
+    row.querySelector('.it-qty').value = it.qty || 1;
+    row.querySelector('.it-price').value = it.price ?? '';
+    $('items').appendChild(row);
+    updateTotal();
+    return row;
+  }
+  function readItems() {
+    return [...$('items').children].map((row) => ({
+      name: row.querySelector('.it-name').value.trim(),
+      qty: Number(row.querySelector('.it-qty').value) || 1,
+      details: row.querySelector('.it-details').value.trim(),
+      price: row.querySelector('.it-price').value,
+    })).filter((it) => it.name);
+  }
+  function updateTotal() {
+    const items = readItems().filter((it) => it.price !== '');
+    $('total').hidden = !items.length;
+    $('total').textContent = 'Total ' + money(items.reduce((s, it) => s + Number(it.price) * it.qty, 0));
+  }
+  function resetItems() { $('items').innerHTML = ''; addRow(); }
+  $('addItem').addEventListener('click', () => addRow().querySelector('.it-name').focus());
+  $('items').addEventListener('click', (e) => {
+    if (!e.target.closest('.rm')) return;
+    e.target.closest('.item').remove();
+    if (!$('items').children.length) addRow();
+    updateTotal();
+  });
+  $('items').addEventListener('input', (e) => {
+    // Picking a known item fills in its last price
+    if (e.target.classList.contains('it-name')) {
+      const m = menuItems.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
+      const price = e.target.closest('.item').querySelector('.it-price');
+      if (m && m.price != null && price.value === '') price.value = m.price;
+    }
+    updateTotal();
+  });
+  $('quick').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-quick]');
+    if (!b) return;
+    const m = menuItems[Number(b.dataset.quick)];
+    // Fill the first empty row, otherwise add one; then jump to its details
+    const empty = [...$('items').children].find((r) => !r.querySelector('.it-name').value.trim());
+    const row = empty || addRow();
+    row.querySelector('.it-name').value = m.name;
+    if (m.price != null) row.querySelector('.it-price').value = m.price;
+    updateTotal();
+    row.querySelector('.it-details').focus();
+  });
+
+  $('number').addEventListener('input', () => { numberTouched = true; });
+  $('newForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const items = readItems();
+    const note = $('noteInput').value.trim();
+    if (!items.length && !note) { $('items').querySelector('.it-name').focus(); return; }
+    const body = { number: $('number').value.trim(), note, items };
+    try {
+      await api('/api/staff/orders', body);
+      $('noteInput').value = ''; numberTouched = false;
+      resetItems(); loadMenu();
+    } catch (_) {}
+  });
+  resetItems();
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const id = btn.closest('[data-id]').dataset.id;
+    const act = btn.dataset.act;
+    let body;
+    if (act === 'note') {
+      const o = state.orders.find((x) => x.id === id);
+      const note = prompt(`Note for order ${o ? o.number : ''}`, o ? o.note : '');
+      if (note === null) return;
+      body = { note };
+    }
+    btn.disabled = true;
+    try {
+      await api(`/api/staff/orders/${id}/${act}`, body);
+    } catch (_) {}
+    btn.disabled = false;
+  });
+
+  if (NEED_PIN && !pin) showGate(false); else start();
+})();
+</script>
+</body>
+</html>

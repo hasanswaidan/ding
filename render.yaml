@@ -1,0 +1,14 @@
+# Render.com blueprint: New > Blueprint, pick this repository, and Render sets up the live demo.
+services:
+  - type: web
+    name: ding-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: DEMO
+        value: "1"
+      - key: SHOP_NAME
+        value: Café Saida

@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Order {{number}} · {{shop}}</title>
+<meta name="theme-color" content="#14211B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Order {{number}}">
+<link rel="manifest" href="/o/{{id}}/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Familjen+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  body { min-height: 100dvh; padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px, env(safe-area-inset-left)); }
+  main { max-width: 440px; margin: 0 auto; padding-block: 20px 32px; display: grid; gap: 20px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .shop { font: 900 22px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
+  .conn { font: 600 12px/1 var(--font-mono); color: var(--muted); }
+  .conn.lost { color: var(--danger); }
+
+  /* The pager puck */
+  .puck {
+    --led: var(--prep);
+    position: relative; width: min(78vw, 320px); aspect-ratio: 1; max-width: 100%; margin: 4px auto 0;
+    border-radius: 50%; background: var(--card); box-shadow: var(--shadow), inset 0 0 0 1px var(--line);
+    display: grid; place-items: center;
+  }
+  .puck.ready { --led: var(--ready); }
+  .leds { position: absolute; inset: 0; }
+  .leds i {
+    position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px; border-radius: 50%;
+    background: var(--led); opacity: .18;
+    transform: rotate(calc(var(--i) * 30deg)) translateY(calc(min(78vw, 320px) * -.44));
+  }
+  .puck.preparing .leds i { animation: chase 2.4s linear infinite; animation-delay: calc(var(--i) * .2s); }
+  .puck.ready .leds i { opacity: 1; animation: blink .7s steps(2, jump-none) infinite; box-shadow: 0 0 12px var(--led); }
+  .puck.collected .leds i { opacity: .25; background: var(--muted); }
+  @keyframes chase { 0%, 70% { opacity: .18 } 8% { opacity: 1 } }
+  @keyframes blink { 50% { opacity: .25 } }
+  .puck-inner { text-align: center; display: grid; gap: 2px; }
+  .num { font: 900 clamp(84px, 30vw, 132px)/.86 var(--font-display); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .puck .label { margin-bottom: 6px; }
+
+  .status { text-align: center; display: grid; gap: 4px; }
+  .status h1 { margin: 0; font: 700 26px/1.15 var(--font-body); text-wrap: balance; }
+  .status p { margin: 0; color: var(--muted); }
+  .status .note { font-weight: 600; color: var(--ink); }
+
+  /* Ordered → Preparing → Ready: a real sequence */
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .steps li { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+  .steps li::before { content: ""; height: 6px; border-radius: 3px; background: var(--line); }
+  .steps li.done::before { background: var(--ink); }
+  .steps li.now { color: var(--ink); font-weight: 600; }
+  .steps li.now::before { background: var(--prep); }
+  .steps.ready li.now::before { background: var(--ready); }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+  .panel h2 { margin: 0; font-size: 17px; }
+  .panel p { margin: 0; color: var(--muted); font-size: 15px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .item-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .item-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: baseline; }
+  .item-list .q { font: 600 15px/1 var(--font-mono); color: var(--muted); }
+  .item-list .what { display: grid; gap: 2px; min-width: 0; }
+  .item-list .what b { font-size: 17px; }
+  .item-list small { color: var(--muted); font-size: 14px; }
+  .item-list .p { font: 600 14px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .order-total { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 10px; font: 600 16px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .ios-steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; display: grid; gap: 4px; }
+  .ios-steps b { color: var(--ink); }
+  .meta { display: flex; justify-content: space-between; gap: 12px; font: 600 13px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* Full-screen "it's ready" takeover */
+  .ring {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center;
+    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: var(--ready); color: var(--on-accent); animation: flash 1s ease-in-out infinite;
+    border: 0; width: 100%; font: inherit;
+  }
+  .ring .num { font-size: clamp(120px, 44vw, 220px); }
+  .ring h2 { margin: 8px 0 4px; font: 700 28px/1.1 var(--font-body); }
+  .ring p { margin: 0; opacity: .85; }
+  .ring .stop { margin-top: 28px; display: inline-flex; padding: 12px 22px; border-radius: 999px; border: 2px solid currentColor; font-weight: 700; }
+  @keyframes flash { 50% { filter: brightness(1.12) } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="shop">{{shop}}</span>
+    <span class="conn" id="conn">Connecting…</span>
+  </header>
+
+  <div class="puck preparing" id="puck">
+    <div class="leds" aria-hidden="true">
+      <i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i style="--i:4"></i><i style="--i:5"></i>
+      <i style="--i:6"></i><i style="--i:7"></i><i style="--i:8"></i><i style="--i:9"></i><i style="--i:10"></i><i style="--i:11"></i>
+    </div>
+    <div class="puck-inner">
+      <span class="label">Order</span>
+      <span class="num" id="num">{{number}}</span>
+    </div>
+  </div>
+
+  <div class="status" aria-live="polite">
+    <h1 id="headline">Getting your order…</h1>
+    <p id="sub"></p>
+    <p class="note" id="note" hidden></p>
+  </div>
+
+  <section class="panel order-card" id="orderCard" hidden>
+    <h2>Your order</h2>
+    <ul class="item-list" id="itemList"></ul>
+    <p class="order-note" id="orderNote" hidden></p>
+    <div class="order-total" id="orderTotal" hidden></div>
+  </section>
+
+  <ol class="steps" id="steps">
+    <li class="done">Ordered</li>
+    <li class="now">Preparing</li>
+    <li>Ready</li>
+  </ol>
+
+  <section class="panel" id="alerts">
+    <h2 id="alertsTitle">Get pinged when it's ready</h2>
+    <p id="alertsText">Turn on alerts and this phone will buzz and ring like the pager, even if you lock the screen.</p>
+    <ol class="ios-steps" id="iosSteps" hidden>
+      <li>Tap <b>Share</b> at the bottom of Safari.</li>
+      <li>Choose <b>Add to Home Screen</b>, then open it from your home screen.</li>
+      <li>Tap <b>Turn on alerts</b> there.</li>
+    </ol>
+    <div class="row">
+      <button class="btn btn-primary" id="enable" type="button">Turn on alerts</button>
+      <button class="btn" id="test" type="button" hidden>Test sound</button>
+    </div>
+  </section>
+
+  <div class="meta">
+    <span id="waited">Waiting 0:00</span>
+    <span>No app needed</span>
+  </div>
+</main>
+
+<button class="ring" id="ring" type="button" hidden aria-label="Stop ringing">
+  <div>
+    <span class="label" style="color:inherit;opacity:.8">Order</span>
+    <div class="num" id="ringNum">{{number}}</div>
+    <h2>Your order is ready</h2>
+    <p>Please come to the counter.</p>
+    <span class="stop">Tap to stop ringing</span>
+  </div>
+</button>
+
+<script>
+(() => {
+  const ORDER_ID = "{{id}}";
+  const $ = (id) => document.getElementById(id);
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+  let order = null;
+  let lastStatus = null;
+  let lastPings = 0;
+  let ringTimer = null;
+  let audioCtx = null;
+  let wakeLock = null;
+  let swReg = null;
+
+  // ---------- Sound: a two-tone counter bell made with WebAudio ----------
+  function unlockAudio() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (_) {}
+  }
+  function ding() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    [[988, 0], [1319, 0.18]].forEach(([f, d]) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + d);
+      g.gain.exponentialRampToValueAtTime(0.5, t + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.9);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t + d); o.stop(t + d + 1);
+    });
+  }
+  function startRinging() {
+    $('ring').hidden = false;
+    document.title = `🔔 Order ${order.number} is ready`;
+    stopRinging(true);
+    let n = 0;
+    const tick = () => {
+      ding();
+      if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
+      if (++n >= 40) stopRinging();
+    };
+    tick();
+    ringTimer = setInterval(tick, 1600);
+  }
+  function stopRinging(keepScreen) {
+    clearInterval(ringTimer); ringTimer = null;
+    if (navigator.vibrate) navigator.vibrate(0);
+    if (!keepScreen) $('ring').hidden = true;
+  }
+  $('ring').addEventListener('click', () => stopRinging());
+
+  // ---------- Keep the screen awake while waiting ----------
+  async function keepAwake() {
+    try {
+      if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (_) {}
+  }
+
+  // ---------- Rendering ----------
+  const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  let clockSkew = 0;
+
+  function render() {
+    if (!order) return;
+    const puck = $('puck'), steps = $('steps').children;
+    $('num').textContent = order.number; $('ringNum').textContent = order.number;
+    puck.className = 'puck ' + (order.status === 'ready' ? 'ready' : order.status === 'preparing' ? 'preparing' : 'collected');
+    $('steps').classList.toggle('ready', order.status === 'ready');
+    [...steps].forEach((li) => li.className = '');
+    const items = order.items || [];
+    $('note').hidden = !order.note || items.length > 0; $('note').textContent = order.note || '';
+    renderItems(items);
+
+    if (order.status === 'preparing') {
+      $('headline').textContent = 'Being prepared';
+      $('sub').textContent = order.ahead === 0 ? "You're next in line." : `${order.ahead} order${order.ahead === 1 ? '' : 's'} ahead of you.`;
+      steps[0].className = 'done'; steps[1].className = 'now';
+      document.title = `Order ${order.number} · preparing`;
+    } else if (order.status === 'ready') {
+      $('headline').textContent = 'Ready! Come to the counter';
+      $('sub').textContent = `Show order ${order.number} to the staff.`;
+      steps[0].className = 'done'; steps[1].className = 'done'; steps[2].className = 'now';
+    } else if (order.status === 'collected') {
+      $('headline').textContent = 'Enjoy!';
+      $('sub').textContent = 'This order has been collected. You can close this page.';
+      [...steps].forEach((li) => li.className = 'done');
+      $('alerts').hidden = true;
+      document.title = `Order ${order.number} · collected`;
+    } else {
+      $('headline').textContent = 'This order link has expired';
+      $('sub').textContent = 'Ask the staff if you are still waiting.';
+      $('alerts').hidden = true; $('steps').hidden = true;
+    }
+    renderAlerts();
+  }
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const money = (n) => Number(n).toFixed(2);
+  function renderItems(items) {
+    $('orderCard').hidden = !items.length || order.status === 'gone';
+    if (!items.length) return;
+    $('itemList').innerHTML = items.map((it) => `<li>
+        <span class="q">${it.qty}×</span>
+        <span class="what"><b>${esc(it.name)}</b>${it.details ? `<small>${esc(it.details)}</small>` : ''}</span>
+        <span class="p">${it.price != null ? money(it.price * it.qty) : ''}</span>
+      </li>`).join('');
+    $('orderNote').hidden = !order.note; $('orderNote').textContent = order.note || '';
+    $('orderTotal').hidden = order.total == null;
+    $('orderTotal').innerHTML = `<span>Total</span><span>${order.total != null ? money(order.total) : ''}</span>`;
+  }
+
+  function renderAlerts() {
+    const enable = $('enable'), test = $('test');
+    const granted = 'Notification' in window && Notification.permission === 'granted';
+    $('iosSteps').hidden = true;
+    if (order && order.alerts && granted) {
+      $('alertsTitle').textContent = "Alerts are on";
+      $('alertsText').textContent = "You can lock your phone or walk around. We'll send a notification the moment it's ready.";
+      enable.hidden = true; test.hidden = false;
+    } else if (isIOS && !standalone) {
+      $('alertsTitle').textContent = 'Keep this page open';
+      $('alertsText').textContent = 'It will ring and flash when your order is ready. For lock-screen alerts on iPhone:';
+      $('iosSteps').hidden = false;
+      enable.textContent = 'Turn on sound'; enable.hidden = !!audioCtx; test.hidden = !audioCtx;
+    } else if (!pushSupported) {
+      $('alertsTitle').textContent = 'Keep this page open';
+      $('alertsText').textContent = "This browser can't show notifications, so keep this page open. It will ring and flash when your order is ready.";
+      enable.textContent = 'Turn on sound'; enable.hidden = !!audioCtx; test.hidden = !audioCtx;
+    } else if ('Notification' in window && Notification.permission === 'denied') {
+      $('alertsTitle').textContent = 'Notifications are blocked';
+      $('alertsText').textContent = 'Keep this page open and it will ring when your order is ready, or allow notifications for this site in your browser settings.';
+      enable.textContent = 'Turn on sound'; enable.hidden = !!audioCtx; test.hidden = !audioCtx;
+    }
+  }
+
+  setInterval(() => {
+    if (!order) return;
+    const end = order.status === 'preparing' ? Date.now() + clockSkew : (order.readyAt || Date.now() + clockSkew);
+    $('waited').textContent = (order.status === 'preparing' ? 'Waiting ' : 'Waited ') + fmt(end - order.createdAt);
+  }, 1000);
+
+  // ---------- Live connection ----------
+  let es = null, gotEvent = false, pollTimer = null;
+  const isDone = (s) => s === 'gone' || s === 'collected' || s === 'cancelled';
+  function apply(data) {
+    if (data.now) clockSkew = data.now - Date.now();
+    const prev = lastStatus, prevPings = lastPings;
+    order = data; lastStatus = data.status; lastPings = data.pings || 0;
+    render();
+    if (data.status === 'ready' && prev && prev !== 'ready') startRinging();
+    else if (data.status === 'ready' && prev === 'ready' && lastPings > prevPings) startRinging();
+    if (data.status !== 'ready') stopRinging();
+    if (isDone(data.status)) { es.close(); clearInterval(pollTimer); }
+  }
+  // Polling fallback: some tunnels (e.g. trycloudflare) hold back SSE, so if no event arrives soon, poll instead.
+  async function poll() {
+    try {
+      const r = await fetch(`/api/orders/${ORDER_ID}?poll=1`, { cache: 'no-store' });
+      if (r.status === 404) return apply({ id: ORDER_ID, status: 'gone' });
+      if (!r.ok) throw new Error(r.status);
+      apply(await r.json());
+      $('conn').textContent = 'Live'; $('conn').classList.remove('lost');
+    } catch (_) {
+      $('conn').textContent = 'Reconnecting…'; $('conn').classList.add('lost');
+    }
+  }
+  function connect() {
+    es = new EventSource(`/api/orders/${ORDER_ID}/events`);
+    es.addEventListener('open', () => { $('conn').textContent = 'Live'; $('conn').classList.remove('lost'); });
+    es.addEventListener('error', () => { if (!pollTimer) { $('conn').textContent = 'Reconnecting…'; $('conn').classList.add('lost'); } });
+    es.addEventListener('order', (e) => { gotEvent = true; apply(JSON.parse(e.data)); });
+    setTimeout(() => { if (!gotEvent && !isDone(lastStatus)) { poll(); pollTimer = setInterval(poll, 2000); } }, 4000);
+  }
+
+  // ---------- Push subscription ----------
+  const urlB64ToUint8 = (s) => { const p = '='.repeat((4 - s.length % 4) % 4); const b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, (c) => c.charCodeAt(0)); };
+
+  async function enableAlerts() {
+    unlockAudio(); ding(); keepAwake();
+    if (navigator.vibrate) navigator.vibrate(60);
+    if (!pushSupported || (isIOS && !standalone)) { renderAlerts(); return; }
+    const btn = $('enable');
+    btn.disabled = true; btn.textContent = 'Turning on…';
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { renderAlerts(); return; }
+      swReg = swReg || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+      const { publicKey } = await (await fetch('/api/vapid')).json();
+      let sub = await swReg.pushManager.getSubscription();
+      if (!sub) sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(publicKey) });
+      const r = await fetch(`/api/orders/${ORDER_ID}/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
+      if (!r.ok) throw new Error('subscribe failed');
+      if (order) order.alerts = true;
+    } catch (e) {
+      $('alertsText').textContent = "Couldn't turn on notifications here. Keep this page open and it will ring when your order is ready.";
+    } finally {
+      btn.disabled = false; btn.textContent = 'Turn on alerts';
+      renderAlerts();
+    }
+  }
+  $('enable').addEventListener('click', enableAlerts);
+  $('test').addEventListener('click', () => { unlockAudio(); ding(); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); });
+
+  // Any tap unlocks sound (browsers only allow audio after a tap)
+  document.addEventListener('pointerdown', () => { if (!audioCtx) { unlockAudio(); renderAlerts(); } keepAwake(); }, { once: false, passive: true });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((r) => { swReg = r; }).catch(() => {});
+  connect();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your order · {{shop}}</title>
+<meta name="theme-color" content="#14211B">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Familjen+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  body { min-height: 100dvh; padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px, env(safe-area-inset-left)); }
+  main { max-width: 440px; margin: 0 auto; padding-block: 20vh 32px; display: grid; gap: 16px; text-align: center; justify-items: center; }
+  .shop { font: 900 26px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
+  h1 { margin: 0; font: 700 24px/1.2 var(--font-body); }
+  p { margin: 0; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <span class="shop">{{shop}}</span>
+  <h1 id="msg">Finding your order…</h1>
+  <p id="sub">One moment.</p>
+  <button class="btn btn-primary" id="retry" type="button" hidden>Try again</button>
+</main>
+<script>
+(() => {
+  // Picking up an order is a POST (not the page load itself), so link previews never take one.
+  // If the cashier hasn't entered the order yet, keep checking for a few minutes.
+  const $ = (id) => document.getElementById(id);
+  const WAIT_MS = 3 * 60e3;
+  let started = Date.now();
+  async function join() {
+    $('retry').hidden = true;
+    try {
+      const r = await fetch('/api/join', { method: 'POST', credentials: 'same-origin' });
+      if (!r.ok) throw new Error(r.status);
+      const d = await r.json();
+      if (d.id) return location.replace('/o/' + encodeURIComponent(d.id));
+      if (Date.now() - started > WAIT_MS) {
+        $('msg').textContent = 'No order found';
+        $('sub').textContent = 'Ask the cashier to enter your order, then tap Try again.';
+        $('retry').hidden = false;
+        return;
+      }
+      $('msg').textContent = 'Waiting for the cashier…';
+      $('sub').textContent = 'Your order will appear here as soon as it is entered. Keep this page open.';
+      setTimeout(join, 2000);
+    } catch (_) {
+      $('msg').textContent = "Couldn't reach the shop";
+      $('sub').textContent = 'Check your connection, or ask the staff.';
+      $('retry').hidden = false;
+    }
+  }
+  $('retry').addEventListener('click', () => { started = Date.now(); join(); });
+  join();
+})();
+</script>
+</body>
+</html>
