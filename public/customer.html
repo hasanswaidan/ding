@@ -74,6 +74,17 @@
   .order-total { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 10px; font: 600 16px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
   .ios-steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; display: grid; gap: 4px; }
   .ios-steps b { color: var(--ink); }
+  .ios-more summary { cursor: pointer; color: var(--muted); font-size: 15px; text-decoration: underline; }
+  .ios-more[open] summary { margin-bottom: 8px; }
+  .cta-box { display: grid; gap: 8px; text-align: center; }
+  .cta {
+    min-height: 64px; padding: 0 20px; border-radius: 16px; border: 0; width: 100%;
+    background: var(--ready); color: var(--on-accent); font: 700 20px/1.2 var(--font-body);
+    box-shadow: 0 6px 20px rgba(15, 138, 84, .3); animation: nudge 2.4s ease-in-out infinite;
+  }
+  .cta[disabled] { opacity: .6; animation: none; }
+  .cta-sub { margin: 0; color: var(--muted); font-size: 14px; }
+  @keyframes nudge { 0%, 85%, 100% { transform: none } 90% { transform: scale(1.03) } 95% { transform: scale(.99) } }
   .meta { display: flex; justify-content: space-between; gap: 12px; font: 600 13px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* Full-screen "it's ready" takeover */
@@ -96,6 +107,12 @@
     <span class="shop">{{shop}}</span>
     <span class="conn" id="conn">Connecting…</span>
   </header>
+
+  <!-- One tap: turns on notifications where the browser allows it, and always sound + screen-awake -->
+  <div class="cta-box" id="ctaBox">
+    <button class="cta" id="cta" type="button">🔔 Notify me when it's ready</button>
+    <p class="cta-sub">One tap. We'll ring this phone when your order is ready.</p>
+  </div>
 
   <div class="puck preparing" id="puck">
     <div class="leds" aria-hidden="true">
@@ -130,11 +147,14 @@
   <section class="panel" id="alerts">
     <h2 id="alertsTitle">Get pinged when it's ready</h2>
     <p id="alertsText">Turn on alerts and this phone will buzz and ring like the pager, even if you lock the screen.</p>
-    <ol class="ios-steps" id="iosSteps" hidden>
-      <li>Tap <b>Share</b> at the bottom of Safari.</li>
-      <li>Choose <b>Add to Home Screen</b>, then open it from your home screen.</li>
-      <li>Tap <b>Turn on alerts</b> there.</li>
-    </ol>
+    <details class="ios-more" id="iosSteps" hidden>
+      <summary>Want an alert even with the screen locked?</summary>
+      <ol class="ios-steps">
+        <li>Tap <b>Share</b> at the bottom of Safari.</li>
+        <li>Choose <b>Add to Home Screen</b>, then open it from your home screen.</li>
+        <li>Tap <b>Turn on alerts</b> there.</li>
+      </ol>
+    </details>
     <div class="row">
       <button class="btn btn-primary" id="enable" type="button">Turn on alerts</button>
       <button class="btn" id="test" type="button" hidden>Test sound</button>
@@ -285,8 +305,10 @@
       $('alertsText').textContent = "You can lock your phone or walk around. We'll send a notification the moment it's ready.";
       enable.hidden = true; test.hidden = false;
     } else if (isIOS && !standalone) {
-      $('alertsTitle').textContent = 'Keep this page open';
-      $('alertsText').textContent = 'It will ring and flash when your order is ready. For lock-screen alerts on iPhone:';
+      $('alertsTitle').textContent = audioCtx ? "You're all set. Keep this page open" : 'Keep this page open';
+      $('alertsText').textContent = audioCtx
+        ? "We'll ring and flash here the moment your order is ready. The screen stays on while you wait."
+        : 'It will ring and flash when your order is ready.';
       $('iosSteps').hidden = false;
       enable.textContent = 'Turn on sound'; enable.hidden = !!audioCtx; test.hidden = !audioCtx;
     } else if (!pushSupported) {
@@ -298,7 +320,19 @@
       $('alertsText').textContent = 'Keep this page open and it will ring when your order is ready, or allow notifications for this site in your browser settings.';
       enable.textContent = 'Turn on sound'; enable.hidden = !!audioCtx; test.hidden = !audioCtx;
     }
+    // The big one-tap button goes away once this phone will ring: alerts on, or (where the browser
+    // can't do alerts, or they were refused) sound unlocked for the open page
+    const canAsk = pushSupported && !(isIOS && !standalone) && Notification.permission === 'default';
+    const armed = (order && order.alerts && granted) || (!!audioCtx && !canAsk);
+    const over = order && ['collected', 'cancelled', 'gone'].includes(order.status);
+    $('ctaBox').hidden = armed || over;
+    if (!$('ctaBox').hidden) $('alerts').hidden = true; // the big button says it all until it's tapped
+    else if (!over) $('alerts').hidden = false;
   }
+  $('cta').addEventListener('click', async () => {
+    $('cta').disabled = true;
+    try { await enableAlerts(); } finally { $('cta').disabled = false; renderAlerts(); }
+  });
 
   setInterval(() => {
     if (!order) return;
