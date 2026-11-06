@@ -1,0 +1,13 @@
+{
+  "mode": "live",
+  "countryCode": "961",
+  "url": "https://YOUR-PROVIDER.example/api/send",
+  "method": "POST",
+  "headers": { "Authorization": "Bearer PUT_YOUR_API_KEY_HERE" },
+  "bodyType": "json",
+  "body": { "phone": "{{phone}}", "message": "{{message}}" },
+  "messages": {
+    "ready": "☕ {{shop}}: your order {{number}} is ready! {{items}}Please come to the counter.",
+    "ping": "⏰ {{shop}}: reminder, your order {{number}} is waiting at the counter."
+  }
+}

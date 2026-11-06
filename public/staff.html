@@ -135,6 +135,11 @@
             <input id="number" inputmode="numeric" maxlength="8" required>
           </div>
           <div class="field">
+            <label class="label" for="phoneInput">Customer's WhatsApp number</label>
+            <input id="phoneInput" type="tel" inputmode="tel" maxlength="20" placeholder="e.g. 71 123 456">
+            <p class="hint" id="waHint">We'll send a WhatsApp message when you mark it ready. Leave empty if they'd rather scan the QR.</p>
+          </div>
+          <div class="field">
             <span class="label">Items</span>
             <div class="quick" id="quick"></div>
             <div class="items" id="items"></div>
@@ -251,7 +256,18 @@
   const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  function waChip(o) {
+    if (!o.hadPhone) return '';
+    const w = o.whatsapp, who = o.phone ? ` ${esc(o.phone)}` : '';
+    if (!w) return `<span class="chip off">WhatsApp${who}</span>`;
+    if (w.status === 'sending') return '<span class="chip warn">Sending WhatsApp…</span>';
+    if (w.status === 'sent') return `<span class="chip ok">WhatsApp sent${w.kind === 'ping' ? ' (reminder)' : ''}</span>`;
+    if (w.status === 'test') return '<span class="chip warn">WhatsApp: test mode, not sent</span>';
+    return `<span class="chip bad" title="${esc(w.error || '')}">WhatsApp failed. Call out the number</span>`;
+  }
+  const waSent = (o) => o.whatsapp && o.whatsapp.status === 'sent';
   function phoneChips(o) {
+    if (o.hadPhone && !o.alerts && !o.watching && !o.scannedAt && !o.claimedAt) return ''; // WhatsApp covers it
     if (o.alerts) return '<span class="chip ok">Alerts on</span>';
     if (o.watching) return '<span class="chip ok">Watching on phone</span>';
     if (o.scannedAt || o.claimedAt) return '<span class="chip warn">Scanned, page closed</span>';
@@ -269,12 +285,13 @@
   function ticket(o) {
     const ready = o.status === 'ready';
     const age = ready ? `Ready ${fmt(Date.now() - o.readyAt)} ago` : `Waiting ${fmt(Date.now() - o.createdAt)}`;
-    const callOut = ready && !o.alerts && !o.watching ? '<span class="chip warn">Call out the number</span>' : '';
+    const callOut = ready && !o.alerts && !o.watching && !waSent(o) && !(o.whatsapp && o.whatsapp.status === 'failed')
+      ? '<span class="chip warn">Call out the number</span>' : '';
     return `<article class="ticket ${ready ? 'is-ready' : ''}" data-id="${o.id}">
       <div class="n">${esc(o.number)}</div>
       <div class="info">
         ${itemLines(o)}
-        <div class="chips">${phoneChips(o)}${callOut}</div>
+        <div class="chips">${waChip(o)}${phoneChips(o)}${callOut}</div>
       </div>
       <div class="age" data-age="${ready ? o.readyAt : o.createdAt}" data-ready="${ready ? 1 : 0}">${age}</div>
       <div class="actions">${ready
@@ -290,6 +307,9 @@
 
   function render() {
     $('live').textContent = 'Live';
+    $('waHint').textContent = state.whatsappMode === 'live'
+      ? "We'll send a WhatsApp message when you mark it ready. Leave empty if they'd rather scan the QR."
+      : 'WhatsApp is in test mode: messages are shown on the ticket but not sent yet.';
     renderCounterQR();
     const next = state.orders.find((o) => o.id === state.nextClaim);
     $('nextClaim').className = 'next' + (next ? '' : ' none');
@@ -401,10 +421,10 @@
     const items = readItems();
     const note = $('noteInput').value.trim();
     if (!items.length && !note) { $('items').querySelector('.it-name').focus(); return; }
-    const body = { number: $('number').value.trim(), note, items };
+    const body = { number: $('number').value.trim(), note, items, phone: $('phoneInput').value.trim() };
     try {
       await api('/api/staff/orders', body);
-      $('noteInput').value = ''; numberTouched = false;
+      $('noteInput').value = ''; $('phoneInput').value = ''; numberTouched = false;
       resetItems(); loadMenu();
     } catch (_) {}
   });

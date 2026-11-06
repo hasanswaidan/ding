@@ -50,7 +50,8 @@ function seed(rand = Math.random) {
       const cancelled = rand() < 0.03;
       const readyAt = createdAt + between(1.5, 7.5) * 60e3;
       const doneAt = cancelled ? createdAt + between(1, 4) * 60e3 : readyAt + between(0.3, 3.5) * 60e3;
-      const scanned = rand() < 0.82;
+      const viaWhatsApp = rand() < 0.55; // cashier typed their number
+      const scanned = !viaWhatsApp && rand() < 0.7;
       orders.push({
         id: crypto.randomBytes(6).toString('base64url'), number: String(i + 1),
         note: rand() < 0.08 ? 'takeaway' : '', items,
@@ -59,6 +60,8 @@ function seed(rand = Math.random) {
         readyAt: cancelled ? null : readyAt, doneAt,
         scannedAt: scanned ? createdAt + 20e3 : null, claimedAt: scanned ? createdAt + 15e3 : null,
         alertsAt: scanned && rand() < 0.65 ? createdAt + 40e3 : null, subs: [], pings: 0,
+        phone: null, hadPhone: viaWhatsApp,
+        whatsapp: viaWhatsApp && !cancelled ? { status: 'sent', kind: 'ready', at: readyAt } : null,
       });
       if (d === 0) todayCount = i + 1;
     });

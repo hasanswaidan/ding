@@ -23,10 +23,12 @@ const CLAIM_MINUTES = 15;    // a counter-QR scan only picks up orders entered t
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const vapid = webpush.loadOrCreateVapid(path.join(DATA_DIR, 'vapid.json'));
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const wa = require('./whatsapp').create({ file: path.join(DATA_DIR, 'whatsapp.json'), shop: SHOP_NAME });
 
 // ---------- State ----------
 // order: { id, number, note, items: [{ name, qty, details, price }], total, status: 'preparing'|'ready'|'collected'|'cancelled',
-//          createdAt, readyAt, doneAt, scannedAt, claimedAt, alertsAt, subs: [pushSubscription], pings }
+//          createdAt, readyAt, doneAt, scannedAt, claimedAt, alertsAt, subs: [pushSubscription], pings,
+//          phone (international digits, deleted after KEEP_DONE_HOURS), hadPhone, whatsapp: { status, at, kind, error } }
 let orders = [];
 let nextNumber = 1;
 try {
@@ -53,6 +55,8 @@ function prune() {
     if (o.doneAt && o.doneAt < now - HISTORY_DAYS * 86400e3) { changed = true; return false; }
     // History doesn't need phone push endpoints
     if (o.doneAt && o.doneAt < now - KEEP_DONE_HOURS * 3600e3 && o.subs && o.subs.length) { o.subs = []; changed = true; }
+    // Customers' phone numbers are only kept while the order is fresh
+    if (o.doneAt && o.doneAt < now - KEEP_DONE_HOURS * 3600e3 && o.phone) { o.phone = null; changed = true; }
     // Demo visitors rarely tidy up: close their orders after 2 hours
     if (DEMO && active(o) && o.createdAt < now - 2 * 3600e3) { o.status = 'collected'; o.doneAt = now; changed = true; }
     return true;
@@ -95,17 +99,32 @@ function customerView(o) {
     alerts: (o.subs || []).length > 0, now: Date.now(),
   };
 }
+// "+961 71 ••• 456": enough for staff to check, without showing the full number on a counter screen
+const maskPhone = (p) => (p ? `+${p.slice(0, -6)} ••• ${p.slice(-3)}` : null);
 function staffView(o) {
-  const { subs, polledAt, ...rest } = o;
+  const { subs, polledAt, phone, ...rest } = o;
   const polling = polledAt && Date.now() - polledAt < 8000 ? 1 : 0; // phone on the polling fallback
-  return { ...rest, alerts: (subs || []).length > 0, watching: (customerStreams.get(o.id) || new Set()).size + polling };
+  return {
+    ...rest, phone: maskPhone(phone),
+    alerts: (subs || []).length > 0, watching: (customerStreams.get(o.id) || new Set()).size + polling,
+  };
 }
 function staffSnapshot() {
   const next = claimable();
   return {
     orders: orders.filter((o) => o.status !== 'cancelled' && recent(o)).map(staffView),
-    nextNumber, base: PUBLIC_URL, shop: SHOP_NAME, nextClaim: next ? next.id : null,
+    nextNumber, base: PUBLIC_URL, shop: SHOP_NAME, nextClaim: next ? next.id : null, whatsappMode: wa.mode,
   };
+}
+
+// ---------- WhatsApp ----------
+async function notifyWhatsApp(o, kind) {
+  if (!o.phone) return;
+  o.whatsapp = { status: 'sending', kind, at: Date.now() };
+  broadcast();
+  const r = await wa.send(o.phone, wa.message(kind, o));
+  o.whatsapp = { ...r, kind, at: Date.now() };
+  save(); broadcast();
 }
 // Items used before, most popular first, with the last price used: quick buttons on the counter screen
 function menu() {
@@ -191,14 +210,14 @@ function cookie(req, name) {
   const m = (req.headers.cookie || '').match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return m ? decodeURIComponent(m[1]) : '';
 }
-function createOrder(number, note, items) {
+function createOrder(number, note, items, phone = null) {
   number = String(number ?? '').trim().slice(0, 8) || String(nextNumber);
   if (/^\d+$/.test(number)) nextNumber = Math.max(nextNumber, Number(number) + 1);
   items = cleanItems(items);
   const o = {
     id: newId(), number, note: String(note || '').trim().slice(0, 80), items, total: orderTotal(items),
     status: 'preparing', createdAt: Date.now(), readyAt: null, doneAt: null, scannedAt: null, claimedAt: null, alertsAt: null,
-    subs: [], pings: 0,
+    subs: [], pings: 0, phone, hadPhone: !!phone, whatsapp: null,
   };
   orders.push(o);
   save(); broadcast();
@@ -341,7 +360,12 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'POST' && p === '/api/staff/orders') {
         const body = await readBody(req);
         if (DEMO && orders.filter(active).length >= 40) return json(res, 429, { error: 'Demo is full. Mark some orders collected first.' });
-        const o = createOrder(body.number, body.note, body.items);
+        let phone = null;
+        if (String(body.phone || '').trim()) {
+          phone = wa.normalize(body.phone);
+          if (!wa.valid(phone)) return json(res, 400, { error: "That phone number doesn't look right. Check it and try again." });
+        }
+        const o = createOrder(body.number, body.note, body.items, phone);
         return json(res, 201, { order: staffView(o), url: `${baseUrl(req)}/o/${o.id}` });
       }
       if (req.method === 'POST' && (match = m(/^\/api\/staff\/orders\/([\w-]+)\/note$/))) {
@@ -358,7 +382,8 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && p === '/api/staff/history') {
         const days = Math.min(HISTORY_DAYS, Math.max(1, Number(url.searchParams.get('days')) || 1));
         const since = Number(url.searchParams.get('since')) || Date.now() - days * 86400e3;
-        const list = orders.filter((o) => o.createdAt >= since).map(({ subs, polledAt, ...o }) => ({ ...o, alerts: !!o.alertsAt || (subs || []).length > 0 }));
+        const list = orders.filter((o) => o.createdAt >= since)
+          .map(({ subs, polledAt, phone, ...o }) => ({ ...o, alerts: !!o.alertsAt || (subs || []).length > 0 }));
         return json(res, 200, { orders: list, shop: SHOP_NAME, now: Date.now() });
       }
       if (req.method === 'POST' && (match = m(/^\/api\/staff\/orders\/([\w-]+)\/(ready|collected|cancel|reopen|ping)$/))) {
@@ -369,9 +394,11 @@ const server = http.createServer(async (req, res) => {
           o.status = 'ready'; o.readyAt = Date.now();
           const what = (o.items || []).map((it) => `${it.qty > 1 ? it.qty + '× ' : ''}${it.name}`).join(', ');
           pushTo(o, { title: `Order ${o.number} is ready`, body: `${what ? what + '. ' : ''}Come to the counter at ${SHOP_NAME}.` });
+          notifyWhatsApp(o, 'ready');
         } else if (action === 'ping') {
           o.pings = (o.pings || 0) + 1;
           pushTo(o, { title: `Reminder: order ${o.number} is waiting`, body: 'Your order is at the counter.', tag: `order-${o.id}-${o.pings}` });
+          notifyWhatsApp(o, 'ping');
         } else if (action === 'collected') {
           o.status = 'collected'; o.doneAt = Date.now();
         } else if (action === 'cancel') {
@@ -398,5 +425,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Ding is running: http://localhost:${PORT}  (staff screen)`);
   if (STAFF_PIN) console.log('Staff PIN is on.');
+  console.log(wa.mode === 'live' ? 'WhatsApp messages: ON' : 'WhatsApp messages: test mode (logged here, not sent). Add data/whatsapp.json to send for real.');
   if (!PUBLIC_URL) console.log('Tip: set PUBLIC_URL to your https address so QR codes point to it.');
 });

@@ -75,6 +75,7 @@ button { cursor: pointer; }
 .chip.ok { color: var(--ready); background: var(--ready-soft); border-color: transparent; }
 .chip.warn { color: var(--prep); background: var(--prep-soft); border-color: transparent; }
 .chip.off { color: var(--muted); }
+.chip.bad { color: var(--danger); border-color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

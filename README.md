@@ -1,6 +1,6 @@
 # Ding: the customer's phone is the pager
 
-**Ding replaces the plastic buzzers at coffee shops and food counters.** The cashier enters the order, the customer scans one QR code on the counter, and their own phone shows the order and rings when it's ready. No app to install, no hardware to buy, charge or lose.
+**Ding replaces the plastic buzzers at coffee shops and food counters.** The cashier enters the order and the customer's WhatsApp number, and the customer gets a WhatsApp message the moment it's ready. They don't have to do anything. Customers who'd rather not share a number scan one QR code on the counter instead, and their phone shows the order and rings. No app to install, no hardware to buy, charge or lose.
 
 **Try it yourself:** run `node start.js` (Node 18+, nothing to install). It prints a public https link: open it on a laptop, then scan the counter QR with your phone. Or deploy your own copy in one click with the included `render.yaml` (see [Deploy](#deploy-free-demo-on-render)).
 
@@ -10,15 +10,16 @@
 
 ## How it works
 
-1. **The cashier enters the order** on the counter screen: items, options (for example "Flat white, 2 shots, oat milk") and prices. Items used before turn into one-tap buttons.
-2. **The customer scans the single QR code** on the counter. Their phone picks up the order the cashier just entered and shows every item, the total, their place in the queue and a timer. If they scan first, the phone waits and picks the order up the moment it's entered.
-3. **The customer taps "Turn on alerts"**, which is one browser permission prompt.
-4. **Staff tap "Mark ready".** The phone gets a push notification (even when locked), flashes green full-screen, plays a bell and vibrates. "Ring again" sends a reminder.
+1. **The cashier enters the order** on the counter screen: items, options (for example "Flat white, 2 shots, oat milk") and prices. Items used before turn into one-tap buttons. The cashier also types the **customer's WhatsApp number**.
+2. **Staff tap "Mark ready".** The customer gets a WhatsApp message: *"☕ Café Saida: your order 12 is ready! Flat white. Please come to the counter."* It works on every phone, even locked, with nothing to install or allow. "Ring again" sends a reminder.
+3. **No number? Scan instead.** The customer scans the single QR code on the counter. Their phone picks up the order the cashier just entered and shows every item, the total, their place in the queue and a timer. One tap on **"Notify me when it's ready"** turns on push notifications (Android) or sound and screen-awake (iPhone). When the order is ready, the page flashes green full-screen, plays a bell and vibrates.
+4. **The counter screen shows how each customer will be reached**: WhatsApp sent, alerts on, or "call out the number".
 5. **The owner dashboard** shows orders, revenue, average order value, preparation and pickup times, top items, busiest hours or days, and how many customers scanned or turned on alerts. It covers today, 7, 30 or 90 days, has a searchable order table, and exports to CSV.
 
 ## Technical highlights
 
 - **No dependencies.** Plain Node.js (18+) standard library only: no npm packages, no framework, no database.
+- **WhatsApp through any provider's HTTP API** (`whatsapp.js`). The endpoint, headers, body format and message texts come from a settings file with `{{placeholders}}`, so a new provider needs no code changes. It normalizes local numbers to international format, has a test mode, and deletes phone numbers 6 hours after the order is done.
 - **Web Push written from scratch** in `webpush.js`: VAPID signing (RFC 8292) and aes128gcm payload encryption (RFC 8291). It works with Chrome/Android, Firefox and Safari on iOS 16.4+.
 - **Real-time updates** with Server-Sent Events, plus an automatic **polling fallback** when a proxy holds back streaming responses. Cloudflare quick tunnels, for example, buffer SSE; the pages detect this within 4 seconds and switch over.
 - **One shared QR code instead of one per order.** Scans claim the newest unclaimed order from the last 15 minutes. A cookie makes rescans return the same order, and the claim is a POST, so link previews never use one up.
@@ -54,6 +55,25 @@ This repository includes `render.yaml`. On [render.com](https://render.com), cho
 
 For a real shop, use a paid instance with a persistent disk (set `DATA_DIR` to it) and set `STAFF_PIN` and `PUBLIC_URL`. Keep `data/vapid.json` once it exists: changing it breaks phones that already turned on alerts.
 
+## WhatsApp messages
+
+Ding sends WhatsApp messages through your provider's HTTP API: an ISP or provider gateway, Meta's Cloud API through a provider, and so on. Until it's set up, Ding runs in **test mode**: tickets show "WhatsApp: test mode, not sent" and the message text is printed in the server window.
+
+To turn it on, copy `whatsapp.example.json` to `data/whatsapp.json` and fill it in. `data/` is never published, so your API key stays private. Ding picks up changes within a few seconds, with no restart.
+
+| Setting | What it does |
+|---|---|
+| `mode` | `"live"` sends for real, `"test"` only logs |
+| `countryCode` | Added to local numbers the cashier types: `"961"` turns `71 123 456` into `96171123456` |
+| `url` | Your provider's send address. It may contain placeholders, e.g. `https://api.example/send?to={{phone}}&text={{message}}` |
+| `method` | Usually `"POST"` |
+| `headers` | E.g. `{ "Authorization": "Bearer YOUR_KEY" }` |
+| `bodyType` | `"json"`, `"form"` or `"none"` (everything in the URL) |
+| `body` | The request body, with placeholders: `{{phone}}` (digits, e.g. `96171123456`), `{{phonePlus}}` (`+96171123456`) and `{{message}}` |
+| `messages.ready` / `messages.ping` | The texts. Placeholders: `{{shop}}`, `{{number}}`, `{{items}}`, `{{note}}` |
+
+A message counts as sent when the provider answers with a 2xx status. Otherwise the ticket shows "WhatsApp failed. Call out the number", and the error is printed in the server window. Unofficial WhatsApp gateways (ones not using Meta's official API) break WhatsApp's terms, and their numbers can be banned, so prefer a provider on the official API.
+
 ## Phone support
 
 | Phone | Alerts with screen locked | With page open |
@@ -81,6 +101,8 @@ Other staff actions are `POST /api/staff/orders/<id>/ready`, `collected`, `ping`
 server.js             web server, order store, live updates, staff/customer/dashboard APIs
 webpush.js            Web Push sender (VAPID + aes128gcm), no dependencies
 demo.js               sample data for DEMO=1
+whatsapp.js           WhatsApp sender for any HTTP provider (settings: data/whatsapp.json)
+whatsapp.example.json example WhatsApp settings to copy
 start.js              local launcher with a temporary public https link
 public/staff.html     counter screen
 public/join.html      what the counter QR opens: picks up the customer's order

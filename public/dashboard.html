@@ -196,6 +196,9 @@
     const pickup = avg(valid.filter((o) => o.status === 'collected' && o.readyAt && o.doneAt).map((o) => o.doneAt - o.readyAt));
     const scanned = valid.filter((o) => o.claimedAt || o.scannedAt).length;
     const alerts = valid.filter((o) => o.alerts).length;
+    const waSent = valid.filter((o) => o.whatsapp && o.whatsapp.status === 'sent').length;
+    // Reached in any way: WhatsApp message delivered to the provider, or browser alerts on
+    const reached = valid.filter((o) => (o.whatsapp && o.whatsapp.status === 'sent') || o.alerts).length;
     const live = valid.filter((o) => o.status === 'preparing' || o.status === 'ready').length;
     const itemCount = valid.reduce((s, o) => s + (o.items || []).reduce((a, it) => a + it.qty, 0), 0);
 
@@ -207,7 +210,9 @@
       [dur(prep), 'Average prep time', ''],
       [dur(pickup), 'Average pickup wait', ''],
       [pct(scanned, valid.length), 'Customers who scanned', ''],
+      [pct(waSent, valid.length), 'Got a WhatsApp message', ''],
       [pct(alerts, valid.length), 'Turned on alerts', ''],
+      [pct(reached, valid.length), 'Notified on their phone', ''],
       [live, 'Open right now', ''],
     ];
     $('tiles').innerHTML = tiles.map(([v, k, extra]) => `<div class="tile"><div class="v">${esc(v)}${extra ? `<small>${esc(extra)}</small>` : ''}</div><div class="k">${esc(k)}</div></div>`).join('');
@@ -274,6 +279,9 @@
     return q ? list.filter((o) => `${o.number} ${itemsText(o)} ${o.note} ${o.status}`.toLowerCase().includes(q)) : list;
   }
   function phone(o) {
+    const w = o.whatsapp && o.whatsapp.status;
+    if (w === 'sent') return 'WhatsApp';
+    if (w === 'failed') return 'WhatsApp failed';
     if (o.alerts) return 'Alerts on';
     if (o.claimedAt || o.scannedAt) return 'Scanned';
     return '–';
@@ -326,12 +334,12 @@
   $('range').addEventListener('click', (e) => { const b = e.target.closest('[data-range]'); if (b) setRange(b.dataset.range); });
   $('search').addEventListener('input', renderTable);
   $('csv').addEventListener('click', () => {
-    const rows = [['number', 'created', 'status', 'items', 'note', 'total', 'prep_seconds', 'pickup_seconds', 'scanned', 'alerts']];
+    const rows = [['number', 'created', 'status', 'items', 'note', 'total', 'prep_seconds', 'pickup_seconds', 'scanned', 'alerts', 'whatsapp']];
     filtered().forEach((o) => rows.push([
       o.number, new Date(o.createdAt).toISOString(), o.status, itemsText(o), o.note || '', o.total ?? '',
       o.readyAt ? Math.round((o.readyAt - o.createdAt) / 1000) : '',
       o.status === 'collected' && o.readyAt && o.doneAt ? Math.round((o.doneAt - o.readyAt) / 1000) : '',
-      o.claimedAt || o.scannedAt ? 'yes' : 'no', o.alerts ? 'yes' : 'no',
+      o.claimedAt || o.scannedAt ? 'yes' : 'no', o.alerts ? 'yes' : 'no', (o.whatsapp && o.whatsapp.status) || '',
     ]));
     const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a');
